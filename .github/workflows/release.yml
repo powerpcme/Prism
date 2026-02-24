@@ -24,17 +24,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
-      ref: ${{ steps.resolve.outputs.ref }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      target_commitish: ${{ steps.resolve.outputs.target_commitish }}
     steps:
       - name: Resolve tag and ref
         id: resolve
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             echo "tag=${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
-            echo "ref=refs/tags/${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
+            echo "checkout_ref=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+            echo "target_commitish=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
           else
             echo "tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
-            echo "ref=${GITHUB_REF}" >> "${GITHUB_OUTPUT}"
+            echo "checkout_ref=${GITHUB_REF}" >> "${GITHUB_OUTPUT}"
+            echo "target_commitish=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
           fi
 
   build-linux:
@@ -45,7 +48,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.meta.outputs.ref }}
+          ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Install build dependencies
         run: |
@@ -93,7 +96,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.meta.outputs.ref }}
+          ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Build macOS artifacts
         run: |
@@ -121,7 +124,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.meta.outputs.ref }}
+          ref: ${{ needs.meta.outputs.checkout_ref }}
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -191,6 +194,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ needs.meta.outputs.target_commitish }}
           name: Prism ${{ needs.meta.outputs.tag }}
           files: release-assets/*.zip
           fail_on_unmatched_files: true
