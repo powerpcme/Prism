@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# CMake / build system
+/build/
+/build-*/
+/build-linux/
+/build-windows/
+/build-win/
+/build-host-tools/
+/build-host-tools-src/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# JUCE generated outputs
+*_artefacts/
+juce_binarydata_*/
+Prism_vst3_helper
+libPrism_Data.a
+
+# Plugin bundles and packaged artifacts
+*.vst3
+*.component
+*.app
+/linux-artifacts/
+/windows-artifacts/
+/mac-artifacts/
+/dist/
+/release/
+*.tar.gz
+*.zip
+
+# Visual Studio / Windows generated files
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
