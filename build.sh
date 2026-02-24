@@ -359,6 +359,40 @@ verify_tools() {
     ok "All required tools verified."
 }
 
+validate_output_dir_has_files() {
+    local dir="$1"
+    local label="$2"
+
+    if [ ! -d "$dir" ]; then
+        err "$label not found at: $dir"
+        return 1
+    fi
+
+    if ! find "$dir" -type f -print -quit | grep -q .; then
+        err "$label exists but contains no built files: $dir"
+        return 1
+    fi
+
+    return 0
+}
+
+check_juce_windows_toolchain_support() {
+    local juce_target_platform="$WORK_DIR/build-windows/_deps/juce-src/modules/juce_core/system/juce_TargetPlatform.h"
+
+    if [ ! -f "$juce_target_platform" ]; then
+        err "JUCE platform header not found: $juce_target_platform"
+        return 1
+    fi
+
+    if grep -q 'MinGW is not supported. Please use an alternative compiler.' "$juce_target_platform"; then
+        err "Current JUCE version does not support MinGW for Windows builds."
+        err "Use a Windows machine/CI with MSVC (or clang-cl), or switch to a JUCE version that supports MinGW."
+        return 1
+    fi
+
+    return 0
+}
+
 # =============================================================================
 # Build functions
 # =============================================================================
@@ -418,20 +452,21 @@ build_linux() {
         -DJUCE_BUILD_EXTRAS=OFF \
         -DJUCE_BUILD_EXAMPLES=OFF
 
-    cmake --build "$WORK_DIR/build-linux" --config "$BUILD_TYPE" \
-        --target Prism_VST3 Prism_Standalone -j"$JOBS"
+    if ! cmake --build "$WORK_DIR/build-linux" --config "$BUILD_TYPE" \
+        --target Prism_VST3 Prism_Standalone -j"$JOBS"; then
+        err "Linux build failed."
+        return 1
+    fi
 
     local ARTEFACTS_ROOT="$WORK_DIR/build-linux/Prism_artefacts/$BUILD_TYPE"
     local VST3_PATH="$ARTEFACTS_ROOT/VST3/Prism.vst3"
     local STANDALONE_DIR="$ARTEFACTS_ROOT/Standalone"
 
-    if [ ! -d "$VST3_PATH" ]; then
-        err "Linux VST3 bundle not found after build."
+    if ! validate_output_dir_has_files "$VST3_PATH" "Linux VST3 bundle"; then
         return 1
     fi
 
-    if [ ! -d "$STANDALONE_DIR" ]; then
-        err "Linux standalone output not found after build."
+    if ! validate_output_dir_has_files "$STANDALONE_DIR" "Linux standalone output"; then
         return 1
     fi
 
@@ -481,20 +516,26 @@ build_windows() {
         -DJUCE_BUILD_EXTRAS=OFF \
         -DJUCE_BUILD_EXAMPLES=OFF
 
-    cmake --build "$WORK_DIR/build-windows" --config "$BUILD_TYPE" \
-        --target Prism_VST3 Prism_Standalone -j"$JOBS"
+    if ! check_juce_windows_toolchain_support; then
+        err "Windows build setup failed."
+        return 1
+    fi
+
+    if ! cmake --build "$WORK_DIR/build-windows" --config "$BUILD_TYPE" \
+        --target Prism_VST3 Prism_Standalone -j"$JOBS"; then
+        err "Windows build failed."
+        return 1
+    fi
 
     local ARTEFACTS_ROOT="$WORK_DIR/build-windows/Prism_artefacts/$BUILD_TYPE"
     local VST3_PATH="$ARTEFACTS_ROOT/VST3/Prism.vst3"
     local STANDALONE_DIR="$ARTEFACTS_ROOT/Standalone"
 
-    if [ ! -d "$VST3_PATH" ]; then
-        err "Windows VST3 bundle not found after build."
+    if ! validate_output_dir_has_files "$VST3_PATH" "Windows VST3 bundle"; then
         return 1
     fi
 
-    if [ ! -d "$STANDALONE_DIR" ]; then
-        err "Windows standalone output not found after build."
+    if ! validate_output_dir_has_files "$STANDALONE_DIR" "Windows standalone output"; then
         return 1
     fi
 

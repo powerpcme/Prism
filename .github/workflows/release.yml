@@ -1,0 +1,197 @@
+name: Build And Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to build and release (for example: v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: Resolve Release Ref
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - name: Resolve tag and ref
+        id: resolve
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
+            echo "ref=refs/tags/${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+            echo "ref=${GITHUB_REF}" >> "${GITHUB_OUTPUT}"
+          fi
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+    needs: meta
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            git \
+            pkg-config \
+            rsync \
+            libasound2-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev \
+            libxcomposite-dev \
+            libxext-dev \
+            libfreetype-dev
+
+      - name: Build Linux artifacts
+        run: |
+          chmod +x ./build.sh
+          ./build.sh --linux-only --skip-deps --clean --jobs "$(nproc)"
+
+      - name: Zip Linux artifacts
+        run: |
+          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-linux-artifacts.zip"
+          test -d linux-artifacts
+          zip -r "${ZIP_NAME}" linux-artifacts
+
+      - name: Upload Linux zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: Prism-${{ needs.meta.outputs.tag }}-linux-artifacts.zip
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-14
+    needs: meta
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Build macOS artifacts
+        run: |
+          chmod +x ./build-mac.sh
+          ./build-mac.sh
+
+      - name: Zip macOS artifacts
+        run: |
+          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-mac-artifacts.zip"
+          test -d mac-artifacts
+          zip -r "${ZIP_NAME}" mac-artifacts
+
+      - name: Upload macOS zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-zip
+          path: Prism-${{ needs.meta.outputs.tag }}-mac-artifacts.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-2022
+    needs: meta
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --target Prism_VST3 Prism_Standalone --parallel
+
+      - name: Collect Windows artifacts
+        shell: pwsh
+        run: |
+          $artefactsRoot = Join-Path $PWD "build/Prism_artefacts/Release"
+          $vst3Path = Join-Path $artefactsRoot "VST3/Prism.vst3"
+          $standalonePath = Join-Path $artefactsRoot "Standalone"
+
+          if (-not (Test-Path $vst3Path)) {
+            throw "VST3 artifact not found at $vst3Path"
+          }
+          if (-not (Test-Path $standalonePath)) {
+            throw "Standalone artifact not found at $standalonePath"
+          }
+
+          Remove-Item -Recurse -Force "windows-artifacts" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path "windows-artifacts" | Out-Null
+          Copy-Item -Recurse -Force $vst3Path "windows-artifacts"
+          Copy-Item -Recurse -Force $standalonePath "windows-artifacts"
+
+      - name: Zip Windows artifacts
+        shell: pwsh
+        run: |
+          $zipName = "Prism-${{ needs.meta.outputs.tag }}-windows-artifacts.zip"
+          if (-not (Test-Path "windows-artifacts")) {
+            throw "windows-artifacts directory is missing"
+          }
+          Compress-Archive -Path "windows-artifacts" -DestinationPath $zipName -Force
+
+      - name: Upload Windows zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: Prism-${{ needs.meta.outputs.tag }}-windows-artifacts.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs:
+      - meta
+      - build-linux
+      - build-macos
+      - build-windows
+    steps:
+      - name: Download zipped artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-zip"
+          merge-multiple: true
+          path: release-assets
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: Prism ${{ needs.meta.outputs.tag }}
+          files: release-assets/*.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true
