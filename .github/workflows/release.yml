@@ -77,7 +77,7 @@ jobs:
 
       - name: Zip Linux artifacts
         run: |
-          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-linux-artifacts.zip"
+          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-linux.zip"
           test -d linux-artifacts
           zip -r "${ZIP_NAME}" linux-artifacts
 
@@ -85,7 +85,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-zip
-          path: Prism-${{ needs.meta.outputs.tag }}-linux-artifacts.zip
+          path: Prism-${{ needs.meta.outputs.tag }}-linux.zip
           if-no-files-found: error
 
   build-macos:
@@ -105,7 +105,7 @@ jobs:
 
       - name: Zip macOS artifacts
         run: |
-          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-mac-artifacts.zip"
+          ZIP_NAME="Prism-${{ needs.meta.outputs.tag }}-mac.zip"
           test -d mac-artifacts
           zip -r "${ZIP_NAME}" mac-artifacts
 
@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-zip
-          path: Prism-${{ needs.meta.outputs.tag }}-mac-artifacts.zip
+          path: Prism-${{ needs.meta.outputs.tag }}-mac.zip
           if-no-files-found: error
 
   build-windows:
@@ -161,7 +161,7 @@ jobs:
       - name: Zip Windows artifacts
         shell: pwsh
         run: |
-          $zipName = "Prism-${{ needs.meta.outputs.tag }}-windows-artifacts.zip"
+          $zipName = "Prism-${{ needs.meta.outputs.tag }}-windows.zip"
           if (-not (Test-Path "windows-artifacts")) {
             throw "windows-artifacts directory is missing"
           }
@@ -171,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: Prism-${{ needs.meta.outputs.tag }}-windows-artifacts.zip
+          path: Prism-${{ needs.meta.outputs.tag }}-windows.zip
           if-no-files-found: error
 
   release:
