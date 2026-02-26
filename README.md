@@ -10,7 +10,7 @@ Prism is a granular sampler instrument based on oual_qroccss from pdmeyer.
 
 
 ![Prism Logo](https://github.com/powerpcme/Prism/blob/main/Images/PrismLogo.png)
-![Prism Screenshot](https://github.com/powerpcme/Prism/blob/main/Images/screenshot.png)
+![Prism Screenshot Mac](https://github.com/powerpcme/Prism/blob/main/Images/screenshot.png)
 
 ## Features
 
