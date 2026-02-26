@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 PrismEditor::PrismEditor(PrismProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
@@ -15,6 +16,19 @@ PrismEditor::PrismEditor(PrismProcessor& p)
     titleLabel.setFont(juce::Font(24.0f).boldened());
     titleLabel.setColour(juce::Label::textColourId, OualLookAndFeel::accentColour);
     addAndMakeVisible(titleLabel);
+
+    auto logoImage = juce::ImageCache::getFromMemory(BinaryData::PrismLogo_png,
+                                                     BinaryData::PrismLogo_pngSize);
+    if (logoImage.isValid())
+    {
+        logoComponent.setImage(logoImage);
+        logoComponent.setImagePlacement(juce::RectanglePlacement::xLeft
+                                        | juce::RectanglePlacement::yMid
+                                        | juce::RectanglePlacement::onlyReduceInSize);
+        addAndMakeVisible(logoComponent);
+        hasLogo = true;
+        titleLabel.setVisible(false);
+    }
 
     // Load sample button (loads for selected voice)
     loadSampleButton.setButtonText("Load Sample");
@@ -160,7 +174,11 @@ void PrismEditor::resized()
 
     // Header
     auto header = bounds.removeFromTop(static_cast<int>(50 * scale));
-    titleLabel.setBounds(header.removeFromLeft(static_cast<int>(120 * scale)).reduced(static_cast<int>(10 * scale)));
+    auto logoArea = header.removeFromLeft(static_cast<int>(220 * scale));
+    if (hasLogo)
+        logoComponent.setBounds(logoArea.reduced(static_cast<int>(8 * scale), static_cast<int>(6 * scale)));
+    else
+        titleLabel.setBounds(logoArea.reduced(static_cast<int>(10 * scale)));
 
     auto headerRight = header.removeFromRight(static_cast<int>(140 * scale));
     loadSampleButton.setBounds(headerRight.reduced(static_cast<int>(5 * scale)));

@@ -120,9 +120,20 @@ target_link_libraries(Prism
         juce::juce_recommended_warning_flags
 )
 
-# Resources directory for presets
-file(GLOB_RECURSE PRESET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Presets/*.xml")
-if(PRESET_FILES)
-    juce_add_binary_data(Prism_Data SOURCES ${PRESET_FILES})
+# Resources embedded into the plugin binary
+set(PRISM_BINARY_RESOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Presets/Default.xml"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Images/PrismLogo.png"
+)
+
+set(PRISM_BINARY_RESOURCE_FILES)
+foreach(resource ${PRISM_BINARY_RESOURCES})
+    if(EXISTS "${resource}")
+        list(APPEND PRISM_BINARY_RESOURCE_FILES "${resource}")
+    endif()
+endforeach()
+
+if(PRISM_BINARY_RESOURCE_FILES)
+    juce_add_binary_data(Prism_Data SOURCES ${PRISM_BINARY_RESOURCE_FILES})
     target_link_libraries(Prism PRIVATE Prism_Data)
 endif()

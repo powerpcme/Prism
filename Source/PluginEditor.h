@@ -38,6 +38,8 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     // Header components
+    juce::ImageComponent logoComponent;
+    bool hasLogo = false;
     juce::Label titleLabel;
     juce::TextButton loadSampleButton;
 
