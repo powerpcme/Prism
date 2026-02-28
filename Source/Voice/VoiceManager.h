@@ -4,6 +4,8 @@
 #include "Voice.h"
 #include "../Sync/TempoSync.h"
 #include <array>
+#include <memory>
+#include <vector>
 
 class VoiceManager
 {
@@ -17,6 +19,7 @@ public:
     void process(juce::AudioBuffer<float>& buffer,
                  const std::array<juce::AudioBuffer<float>, 10>& sampleBuffers,
                  const std::array<double, 10>& sampleSourceRates,
+                 const std::array<std::shared_ptr<const std::vector<float>>, 10>& markers,
                  TempoSync& tempoSync);
 
     // Get a voice by index

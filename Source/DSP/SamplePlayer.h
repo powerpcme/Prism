@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <optional>
 #include <random>
 
 class SamplePlayer
@@ -12,7 +13,7 @@ public:
     void reset();
 
     // Trigger playback from loop start with optional random offset
-    void trigger(float randomAmount = 0.0f);
+    void trigger(float randomAmount = 0.0f, std::optional<float> startPosition = std::nullopt);
 
     // Process a single sample with given speed
     float process(const juce::AudioBuffer<float>& sampleBuffer,

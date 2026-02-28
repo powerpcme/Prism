@@ -40,6 +40,7 @@ void VoiceManager::updateAllParameters()
 void VoiceManager::process(juce::AudioBuffer<float>& buffer,
                            const std::array<juce::AudioBuffer<float>, 10>& sampleBuffers,
                            const std::array<double, 10>& sampleSourceRates,
+                           const std::array<std::shared_ptr<const std::vector<float>>, 10>& markers,
                            TempoSync& tempoSync)
 {
     int numSamples = buffer.getNumSamples();
@@ -53,6 +54,7 @@ void VoiceManager::process(juce::AudioBuffer<float>& buffer,
         if (sampleBuffers[i].getNumSamples() > 0)
         {
             voices[i]->process(buffer, sampleBuffers[i], sampleSourceRates[i],
+                               markers[i],
                                tempoSync, 0, numSamples);
         }
     }

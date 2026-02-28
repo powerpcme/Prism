@@ -59,6 +59,7 @@ void Voice::updateParameters()
     // Random start modulation params
     randStart = parameters.getRawParameterValue(getParamId("rand_start"))->load();
     randRateIndex = static_cast<int>(parameters.getRawParameterValue(getParamId("rand_rate"))->load());
+    markerMode = parameters.getRawParameterValue(getParamId("marker_mode"))->load() > 0.5f;
 
     // Update DSP components
     rateShifter.setPitchShift(speed);
@@ -70,18 +71,39 @@ void Voice::updateParameters()
     envelope.setEnvelopeRate(envRate);
 }
 
-void Voice::trigger()
+void Voice::trigger(const std::shared_ptr<const std::vector<float>>& markers)
 {
     if (!active)
         return;
 
-    samplePlayer.trigger(randPos);
+    std::optional<float> markerStart;
+
+    if (markerMode && markers != nullptr && !markers->empty())
+    {
+        std::vector<float> eligibleMarkers;
+        eligibleMarkers.reserve(markers->size());
+
+        for (float marker : *markers)
+        {
+            if (marker >= modLoopStart && marker < loopEnd)
+                eligibleMarkers.push_back(marker);
+        }
+
+        if (!eligibleMarkers.empty())
+        {
+            std::uniform_int_distribution<size_t> markerIndexDist(0, eligibleMarkers.size() - 1);
+            markerStart = eligibleMarkers[markerIndexDist(randModRng)];
+        }
+    }
+
+    samplePlayer.trigger(randPos, markerStart);
     envelope.trigger();
 }
 
 void Voice::process(juce::AudioBuffer<float>& buffer,
                     const juce::AudioBuffer<float>& sampleBuffer,
                     double sampleSourceRate,
+                    const std::shared_ptr<const std::vector<float>>& markers,
                     TempoSync& tempoSync,
                     int startSample,
                     int numSamples)
@@ -141,7 +163,7 @@ void Voice::process(juce::AudioBuffer<float>& buffer,
 
         if (shouldTriggerNow)
         {
-            trigger();
+            trigger(markers);
         }
     }
 

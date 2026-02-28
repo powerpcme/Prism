@@ -18,11 +18,23 @@ void SamplePlayer::reset()
     playing = false;
 }
 
-void SamplePlayer::trigger(float randomAmount)
+void SamplePlayer::trigger(float randomAmount, std::optional<float> startPosition)
 {
-    float randomOffset = randomDist(rng) * randomAmount;
     float range = currentLoopEnd - currentLoopStart;
-    playPosition = currentLoopStart + randomOffset * range;
+
+    if (startPosition.has_value())
+    {
+        float basePosition = juce::jlimit(currentLoopStart, currentLoopEnd, *startPosition);
+        float jitterRange = range * randomAmount * 0.5f;
+        float jitter = ((randomDist(rng) * 2.0f) - 1.0f) * jitterRange;
+        playPosition = juce::jlimit(currentLoopStart, currentLoopEnd, basePosition + jitter);
+    }
+    else
+    {
+        float randomOffset = randomDist(rng) * randomAmount;
+        playPosition = currentLoopStart + randomOffset * range;
+    }
+
     playing = true;
 }
 

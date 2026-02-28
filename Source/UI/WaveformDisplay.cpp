@@ -1,6 +1,7 @@
 #include "WaveformDisplay.h"
 #include "../PluginProcessor.h"
 #include "LookAndFeel.h"
+#include <algorithm>
 
 WaveformDisplay::WaveformDisplay(PrismProcessor& p, juce::AudioProcessorValueTreeState& params)
     : processor(p), parameters(params)
@@ -11,6 +12,7 @@ WaveformDisplay::WaveformDisplay(PrismProcessor& p, juce::AudioProcessorValueTre
 void WaveformDisplay::setVoice(int v)
 {
     voiceIndex = v;
+    resetZoom();
     cachedNumSamples = 0; // force rebuild
     rebuildWaveformCache();
     repaint();
@@ -34,8 +36,10 @@ void WaveformDisplay::rebuildWaveformCache()
 
     for (int col = 0; col < w; ++col)
     {
-        int startSample = static_cast<int>((static_cast<double>(col) / w) * numSamples);
-        int endSample = static_cast<int>((static_cast<double>(col + 1) / w) * numSamples);
+        auto colStartNorm = viewStart + (static_cast<float>(col) / static_cast<float>(w)) * (viewEnd - viewStart);
+        auto colEndNorm = viewStart + (static_cast<float>(col + 1) / static_cast<float>(w)) * (viewEnd - viewStart);
+        int startSample = static_cast<int>(colStartNorm * numSamples);
+        int endSample = static_cast<int>(colEndNorm * numSamples);
 
         if (endSample > numSamples)
             endSample = numSamples;
@@ -91,10 +95,11 @@ void WaveformDisplay::paint(juce::Graphics& g)
 
     // Draw shaded regions outside loop
     g.setColour(juce::Colours::black.withAlpha(0.5f));
-    if (startX > 0)
-        g.fillRect(0.0f, 0.0f, startX, static_cast<float>(h));
-    if (endX < w)
-        g.fillRect(endX, 0.0f, w - endX, static_cast<float>(h));
+    if (loopStart > viewStart)
+        g.fillRect(0.0f, 0.0f, juce::jlimit(0.0f, static_cast<float>(w), startX), static_cast<float>(h));
+    if (loopEnd < viewEnd)
+        g.fillRect(juce::jlimit(0.0f, static_cast<float>(w), endX), 0.0f,
+                   static_cast<float>(w) - juce::jlimit(0.0f, static_cast<float>(w), endX), static_cast<float>(h));
 
     // Draw waveform
     if (!waveformPeaks.empty())
@@ -118,25 +123,29 @@ void WaveformDisplay::paint(juce::Graphics& g)
     }
 
     // Start marker (green)
-    g.setColour(juce::Colours::green);
-    g.drawVerticalLine(static_cast<int>(startX), 0.0f, static_cast<float>(h));
-    // Triangle handle at top
-    juce::Path startTriangle;
-    startTriangle.addTriangle(startX, 0.0f, startX + 6.0f, 0.0f, startX, 10.0f);
-    g.fillPath(startTriangle);
+    if (loopStart >= viewStart && loopStart <= viewEnd)
+    {
+        g.setColour(juce::Colours::green);
+        g.drawVerticalLine(static_cast<int>(startX), 0.0f, static_cast<float>(h));
+        juce::Path startTriangle;
+        startTriangle.addTriangle(startX, 0.0f, startX + 6.0f, 0.0f, startX, 10.0f);
+        g.fillPath(startTriangle);
+    }
 
     // End marker (red)
-    g.setColour(juce::Colours::red);
-    g.drawVerticalLine(static_cast<int>(endX), 0.0f, static_cast<float>(h));
-    // Triangle handle at top
-    juce::Path endTriangle;
-    endTriangle.addTriangle(endX, 0.0f, endX - 6.0f, 0.0f, endX, 10.0f);
-    g.fillPath(endTriangle);
+    if (loopEnd >= viewStart && loopEnd <= viewEnd)
+    {
+        g.setColour(juce::Colours::red);
+        g.drawVerticalLine(static_cast<int>(endX), 0.0f, static_cast<float>(h));
+        juce::Path endTriangle;
+        endTriangle.addTriangle(endX, 0.0f, endX - 6.0f, 0.0f, endX, 10.0f);
+        g.fillPath(endTriangle);
+    }
 
     // Modulated start marker (translucent)
     float modStart = processor.getVoiceModLoopStart(voiceIndex);
 
-    if (std::abs(modStart - loopStart) > 0.001f)
+    if (std::abs(modStart - loopStart) > 0.001f && modStart >= viewStart && modStart <= viewEnd)
     {
         float modStartX = normalizedToX(modStart);
         g.setColour(juce::Colours::green.withAlpha(0.4f));
@@ -149,9 +158,27 @@ void WaveformDisplay::paint(juce::Graphics& g)
         g.fillPath(modStartTri);
     }
 
+    // User start markers
+    auto markers = processor.getVoiceMarkers(voiceIndex);
+    g.setColour(juce::Colour(0xffffb347).withAlpha(0.85f));
+    for (float marker : markers)
+    {
+        if (marker < viewStart || marker > viewEnd)
+            continue;
+
+        float markerX = normalizedToX(marker);
+        g.drawVerticalLine(static_cast<int>(markerX), 0.0f, static_cast<float>(h));
+
+        juce::Path markerTriangle;
+        markerTriangle.addTriangle(markerX - 4.0f, static_cast<float>(h),
+                                   markerX + 4.0f, static_cast<float>(h),
+                                   markerX, static_cast<float>(h) - 8.0f);
+        g.fillPath(markerTriangle);
+    }
+
     // Playhead (white line)
     double playPos = processor.getVoicePlayPosition(voiceIndex);
-    if (playPos > 0.0 && processor.hasSampleLoaded(voiceIndex))
+    if (playPos > 0.0 && processor.hasSampleLoaded(voiceIndex) && playPos >= viewStart && playPos <= viewEnd)
     {
         float playX = normalizedToX(static_cast<float>(playPos));
         g.setColour(juce::Colours::white.withAlpha(0.9f));
@@ -166,6 +193,15 @@ void WaveformDisplay::resized()
 
 void WaveformDisplay::mouseDown(const juce::MouseEvent& e)
 {
+    if (e.mods.isMiddleButtonDown() && processor.hasSampleLoaded(voiceIndex) && (viewEnd - viewStart) < 0.999f)
+    {
+        panningView = true;
+        panAnchorX = static_cast<float>(e.getPosition().getX());
+        panAnchorStart = viewStart;
+        panAnchorEnd = viewEnd;
+        return;
+    }
+
     juce::String prefix = "voice_" + juce::String(voiceIndex) + "_";
     float loopStart = parameters.getRawParameterValue(prefix + "loop_start")->load();
     float loopEnd = parameters.getRawParameterValue(prefix + "loop_end")->load();
@@ -181,11 +217,42 @@ void WaveformDisplay::mouseDown(const juce::MouseEvent& e)
         draggingStart = true;
     else if (distToEnd < markerHitZone)
         draggingEnd = true;
+    else
+        draggingMarkerIndex = findMarkerNearX(mouseX);
 }
 
 void WaveformDisplay::mouseDrag(const juce::MouseEvent& e)
 {
-    if (!draggingStart && !draggingEnd)
+    if (panningView)
+    {
+        auto width = static_cast<float>(juce::jmax(1, getWidth()));
+        auto span = panAnchorEnd - panAnchorStart;
+        auto deltaX = static_cast<float>(e.getPosition().getX()) - panAnchorX;
+        auto deltaNorm = (deltaX / width) * span;
+
+        viewStart = panAnchorStart - deltaNorm;
+        viewEnd = panAnchorEnd - deltaNorm;
+
+        if (viewStart < 0.0f)
+        {
+            viewEnd -= viewStart;
+            viewStart = 0.0f;
+        }
+        if (viewEnd > 1.0f)
+        {
+            viewStart -= (viewEnd - 1.0f);
+            viewEnd = 1.0f;
+        }
+
+        viewStart = juce::jlimit(0.0f, 1.0f - span, viewStart);
+        viewEnd = juce::jlimit(span, 1.0f, viewStart + span);
+
+        rebuildWaveformCache();
+        repaint();
+        return;
+    }
+
+    if (!draggingStart && !draggingEnd && draggingMarkerIndex < 0)
         return;
 
     juce::String prefix = "voice_" + juce::String(voiceIndex) + "_";
@@ -206,6 +273,15 @@ void WaveformDisplay::mouseDrag(const juce::MouseEvent& e)
         if (auto* param = parameters.getParameter(prefix + "loop_end"))
             param->setValueNotifyingHost(param->convertTo0to1(normalized));
     }
+    else if (draggingMarkerIndex >= 0)
+    {
+        auto markers = processor.getVoiceMarkers(voiceIndex);
+        if (draggingMarkerIndex < static_cast<int>(markers.size()))
+        {
+            markers[static_cast<size_t>(draggingMarkerIndex)] = normalized;
+            processor.replaceVoiceMarkers(voiceIndex, std::move(markers));
+        }
+    }
 
     repaint();
 }
@@ -214,6 +290,64 @@ void WaveformDisplay::mouseUp(const juce::MouseEvent&)
 {
     draggingStart = false;
     draggingEnd = false;
+    draggingMarkerIndex = -1;
+    panningView = false;
+}
+
+void WaveformDisplay::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    if (!processor.hasSampleLoaded(voiceIndex))
+        return;
+
+    processor.toggleVoiceMarker(voiceIndex, xToNormalized(static_cast<float>(e.getPosition().getX())));
+    repaint();
+}
+
+void WaveformDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
+{
+    if (!e.mods.isCtrlDown())
+    {
+        juce::Component::mouseWheelMove(e, wheel);
+        return;
+    }
+
+    if (!processor.hasSampleLoaded(voiceIndex))
+        return;
+
+    auto mouseNorm = xToNormalized(static_cast<float>(e.getPosition().getX()));
+    auto currentSpan = viewEnd - viewStart;
+    auto zoomDelta = 1.0f - (wheel.deltaY * 0.25f);
+    auto newSpan = juce::jlimit(0.02f, 1.0f, currentSpan * zoomDelta);
+
+    if (newSpan >= 0.999f)
+    {
+        resetZoom();
+    }
+    else
+    {
+        auto focusRatio = (mouseNorm - viewStart) / currentSpan;
+        focusRatio = juce::jlimit(0.0f, 1.0f, focusRatio);
+
+        viewStart = mouseNorm - focusRatio * newSpan;
+        viewEnd = viewStart + newSpan;
+
+        if (viewStart < 0.0f)
+        {
+            viewEnd -= viewStart;
+            viewStart = 0.0f;
+        }
+        if (viewEnd > 1.0f)
+        {
+            viewStart -= (viewEnd - 1.0f);
+            viewEnd = 1.0f;
+        }
+
+        viewStart = juce::jlimit(0.0f, 1.0f - newSpan, viewStart);
+        viewEnd = juce::jlimit(newSpan, 1.0f, viewStart + newSpan);
+    }
+
+    rebuildWaveformCache();
+    repaint();
 }
 
 void WaveformDisplay::timerCallback()
@@ -228,10 +362,34 @@ void WaveformDisplay::timerCallback()
 
 float WaveformDisplay::xToNormalized(float x) const
 {
-    return x / static_cast<float>(getWidth());
+    auto width = static_cast<float>(juce::jmax(1, getWidth()));
+    auto local = juce::jlimit(0.0f, width, x) / width;
+    return viewStart + local * (viewEnd - viewStart);
 }
 
 float WaveformDisplay::normalizedToX(float normalized) const
 {
-    return normalized * static_cast<float>(getWidth());
+    auto span = juce::jmax(0.0001f, viewEnd - viewStart);
+    return ((normalized - viewStart) / span) * static_cast<float>(getWidth());
+}
+
+void WaveformDisplay::resetZoom()
+{
+    viewStart = 0.0f;
+    viewEnd = 1.0f;
+}
+
+int WaveformDisplay::findMarkerNearX(float x) const
+{
+    auto markers = processor.getVoiceMarkers(voiceIndex);
+    for (size_t i = 0; i < markers.size(); ++i)
+    {
+        if (markers[i] < viewStart || markers[i] > viewEnd)
+            continue;
+
+        if (std::abs(normalizedToX(markers[i]) - x) <= markerHitZone)
+            return static_cast<int>(i);
+    }
+
+    return -1;
 }

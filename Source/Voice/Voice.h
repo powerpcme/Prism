@@ -8,7 +8,9 @@
 #include "../DSP/AMModulator.h"
 #include "../DSP/EnvelopeShaper.h"
 #include "../Sync/TempoSync.h"
+#include <memory>
 #include <random>
+#include <vector>
 
 class Voice
 {
@@ -19,12 +21,13 @@ public:
     void reset();
 
     // Trigger voice playback
-    void trigger();
+    void trigger(const std::shared_ptr<const std::vector<float>>& markers);
 
     // Process a block of samples (self-triggering with per-voice sync)
     void process(juce::AudioBuffer<float>& buffer,
                  const juce::AudioBuffer<float>& sampleBuffer,
                  double sampleSourceRate,
+                 const std::shared_ptr<const std::vector<float>>& markers,
                  TempoSync& tempoSync,
                  int startSample,
                  int numSamples);
@@ -83,6 +86,7 @@ private:
     // Random start/end modulation
     float randStart = 0.0f;
     int randRateIndex = 2; // default 1/4
+    bool markerMode = false;
 
     // Modulated loop start (updated at rand_rate ticks)
     float modLoopStart = 0.0f;

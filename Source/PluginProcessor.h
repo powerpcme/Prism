@@ -5,6 +5,8 @@
 #include "Voice/VoiceManager.h"
 #include "Sync/TempoSync.h"
 #include <array>
+#include <memory>
+#include <vector>
 
 class PrismProcessor : public juce::AudioProcessor
 {
@@ -50,6 +52,9 @@ public:
     double getSampleSampleRate(int voiceIndex) const { return sampleSourceRates[static_cast<size_t>(voiceIndex)]; }
     const juce::String& getSampleName(int voiceIndex) const { return sampleNames[static_cast<size_t>(voiceIndex)]; }
     const juce::String& getSampleFilePath(int voiceIndex) const { return sampleFilePaths[static_cast<size_t>(voiceIndex)]; }
+    std::vector<float> getVoiceMarkers(int voiceIndex) const;
+    void replaceVoiceMarkers(int voiceIndex, std::vector<float> markers);
+    void toggleVoiceMarker(int voiceIndex, float normalizedPosition);
 
     // Playback position access (delegates to voice)
     double getVoicePlayPosition(int voiceIndex) const;
@@ -82,6 +87,9 @@ public:
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void handleMidiMessage(const juce::MidiMessage& message);
+    void setVoiceMarkers(int voiceIndex, std::vector<float> markers);
+    juce::ValueTree createPersistentState();
+    void restorePersistentState(juce::ValueTree state);
 
     juce::AudioProcessorValueTreeState parameters;
     juce::UndoManager undoManager;
@@ -91,6 +99,7 @@ private:
     std::array<double, 10> sampleSourceRates;
     std::array<juce::String, 10> sampleNames;
     std::array<juce::String, 10> sampleFilePaths;
+    std::array<std::shared_ptr<const std::vector<float>>, 10> voiceMarkers;
     juce::AudioFormatManager formatManager;
 
     // Voice management

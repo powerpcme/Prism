@@ -59,6 +59,7 @@ private:
     std::unique_ptr<WaveformDisplay> waveformDisplay;
     juce::Label sampleNameLabel;
     juce::ToggleButton activeButton;
+    juce::ToggleButton markerModeButton;
 
     // Per-voice sync controls
     juce::ToggleButton syncEnableButton;
@@ -86,6 +87,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> panAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> volumeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> activeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> markerModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncEnableAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> syncRateAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> randRateAttachment;

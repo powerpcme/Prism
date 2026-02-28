@@ -1,6 +1,29 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+namespace
+{
+int getHeaderHeight(int height)
+{
+    return juce::jlimit(48, 72, juce::roundToInt(static_cast<float>(height) * 0.08f));
+}
+
+int getWaveformHeight(int height)
+{
+    return juce::jlimit(60, 120, juce::roundToInt(static_cast<float>(height) * 0.10f));
+}
+
+int getControlsHeight(int height)
+{
+    return juce::jlimit(210, 320, juce::roundToInt(static_cast<float>(height) * 0.36f));
+}
+
+int getPadding(int width, int height)
+{
+    return juce::jlimit(8, 20, juce::roundToInt(static_cast<float>(juce::jmin(width, height)) * 0.015f));
+}
+}
+
 PrismEditor::PrismEditor(PrismProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p)
 {
@@ -107,6 +130,9 @@ PrismEditor::PrismEditor(PrismProcessor& p)
     activeButton.setButtonText("Active");
     addAndMakeVisible(activeButton);
 
+    markerModeButton.setButtonText("Markers");
+    addAndMakeVisible(markerModeButton);
+
     // Per-voice sync controls
     syncEnableButton.setButtonText("SYNC");
     addAndMakeVisible(syncEnableButton);
@@ -136,20 +162,17 @@ PrismEditor::~PrismEditor()
 
 void PrismEditor::paint(juce::Graphics& g)
 {
-    float scale = static_cast<float>(getWidth()) / 800.0f;
-    int controlsHeight = static_cast<int>(240 * scale);
-    int waveformHeight = static_cast<int>(60 * scale);
-
     g.fillAll(OualLookAndFeel::backgroundColour);
 
-    // Draw header background
-    auto headerBounds = getLocalBounds().removeFromTop(50);
+    auto bounds = getLocalBounds();
+    auto headerHeight = getHeaderHeight(bounds.getHeight());
+    auto waveformHeight = getWaveformHeight(bounds.getHeight());
+    auto controlsHeight = getControlsHeight(bounds.getHeight());
+    auto headerBounds = bounds.removeFromTop(headerHeight);
+
     g.setColour(OualLookAndFeel::panelColour);
     g.fillRect(headerBounds);
 
-    // Draw controls panel background
-    auto bounds = getLocalBounds();
-    bounds.removeFromTop(50); // skip header
     auto bottomArea = bounds.removeFromBottom(controlsHeight + waveformHeight);
     auto controlsPanel = bottomArea.removeFromTop(controlsHeight);
     g.setColour(OualLookAndFeel::panelColour.darker(0.2f));
@@ -162,7 +185,7 @@ void PrismEditor::paint(juce::Graphics& g)
 
     // Separator lines
     g.setColour(OualLookAndFeel::accentColour.withAlpha(0.3f));
-    g.drawHorizontalLine(50, 0.0f, static_cast<float>(getWidth()));
+    g.drawHorizontalLine(headerHeight, 0.0f, static_cast<float>(getWidth()));
     g.drawHorizontalLine(getHeight() - controlsHeight - waveformHeight, 0.0f, static_cast<float>(getWidth()));
     g.drawHorizontalLine(getHeight() - waveformHeight, 0.0f, static_cast<float>(getWidth()));
 }
@@ -170,71 +193,99 @@ void PrismEditor::paint(juce::Graphics& g)
 void PrismEditor::resized()
 {
     auto bounds = getLocalBounds();
-    float scale = static_cast<float>(getWidth()) / 800.0f;
+    auto headerHeight = getHeaderHeight(bounds.getHeight());
+    auto waveformHeight = getWaveformHeight(bounds.getHeight());
+    auto controlsHeight = getControlsHeight(bounds.getHeight());
+    auto padding = getPadding(bounds.getWidth(), bounds.getHeight());
+    auto compactPadding = juce::jmax(6, padding - 2);
 
     // Header
-    auto header = bounds.removeFromTop(static_cast<int>(50 * scale));
-    auto logoArea = header.removeFromLeft(static_cast<int>(220 * scale));
-    if (hasLogo)
-        logoComponent.setBounds(logoArea.reduced(static_cast<int>(8 * scale), static_cast<int>(6 * scale)));
-    else
-        titleLabel.setBounds(logoArea.reduced(static_cast<int>(10 * scale)));
+    auto header = bounds.removeFromTop(headerHeight);
+    auto logoWidth = juce::jlimit(180, juce::jmax(180, getWidth() / 3), getWidth() / 3);
+    auto buttonWidth = juce::jlimit(120, 170, getWidth() / 5);
 
-    auto headerRight = header.removeFromRight(static_cast<int>(140 * scale));
-    loadSampleButton.setBounds(headerRight.reduced(static_cast<int>(5 * scale)));
+    auto logoArea = header.removeFromLeft(logoWidth);
+    if (hasLogo)
+        logoComponent.setBounds(logoArea.reduced(padding, compactPadding));
+    else
+        titleLabel.setBounds(logoArea.reduced(padding));
+
+    auto headerRight = header.removeFromRight(buttonWidth);
+    loadSampleButton.setBounds(headerRight.reduced(compactPadding));
 
     // Waveform strip at the very bottom
-    int waveformHeight = static_cast<int>(60 * scale);
     auto waveformStrip = bounds.removeFromBottom(waveformHeight);
-    waveformDisplay->setBounds(waveformStrip.reduced(static_cast<int>(10 * scale), static_cast<int>(4 * scale)));
+    waveformDisplay->setBounds(waveformStrip.reduced(padding, compactPadding));
 
     // Controls panel above waveform
-    auto bottomPanel = bounds.removeFromBottom(static_cast<int>(240 * scale));
-    auto controlsArea = bottomPanel.reduced(static_cast<int>(20 * scale));
+    auto bottomPanel = bounds.removeFromBottom(controlsHeight);
+    auto controlsArea = bottomPanel.reduced(padding * 2, padding);
 
     // Voice label, active button, sync controls, rand rate, sample name on top row
-    auto topRow = controlsArea.removeFromTop(static_cast<int>(30 * scale));
-    selectedVoiceLabel.setBounds(topRow.removeFromLeft(static_cast<int>(100 * scale)));
-    activeButton.setBounds(topRow.removeFromLeft(static_cast<int>(80 * scale)));
-    syncEnableButton.setBounds(topRow.removeFromLeft(static_cast<int>(60 * scale)));
-    syncRateCombo.setBounds(topRow.removeFromLeft(static_cast<int>(80 * scale)));
+    auto topRowHeight = juce::jlimit(28, 36, controlsArea.getHeight() / 5);
+    auto topRow = controlsArea.removeFromTop(topRowHeight);
+    auto topGap = juce::jmax(6, padding / 2);
+
+    selectedVoiceLabel.setBounds(topRow.removeFromLeft(juce::jlimit(100, 150, controlsArea.getWidth() / 6)));
+    topRow.removeFromLeft(topGap);
+    activeButton.setBounds(topRow.removeFromLeft(juce::jlimit(72, 96, controlsArea.getWidth() / 10)));
+    topRow.removeFromLeft(topGap);
+    markerModeButton.setBounds(topRow.removeFromLeft(juce::jlimit(78, 110, controlsArea.getWidth() / 9)));
+    topRow.removeFromLeft(topGap);
+    syncEnableButton.setBounds(topRow.removeFromLeft(juce::jlimit(56, 80, controlsArea.getWidth() / 12)));
+    topRow.removeFromLeft(topGap);
+    syncRateCombo.setBounds(topRow.removeFromLeft(juce::jlimit(76, 110, controlsArea.getWidth() / 10)));
+    topRow.removeFromLeft(topGap);
 
     // Rand rate combo in the top row
-    auto randRateLabelArea = topRow.removeFromLeft(static_cast<int>(60 * scale));
+    auto randRateLabelArea = topRow.removeFromLeft(juce::jlimit(56, 76, controlsArea.getWidth() / 11));
     randRateLabel.setBounds(randRateLabelArea);
-    randRateCombo.setBounds(topRow.removeFromLeft(static_cast<int>(80 * scale)));
+    randRateCombo.setBounds(topRow.removeFromLeft(juce::jlimit(76, 110, controlsArea.getWidth() / 10)));
 
-    sampleNameLabel.setBounds(topRow.reduced(static_cast<int>(4 * scale), 0));
+    sampleNameLabel.setBounds(topRow.reduced(topGap, 0));
+
+    controlsArea.removeFromTop(juce::jmax(8, padding / 2));
 
     // Sliders in 3 columns, 4 rows
-    int sliderHeight = static_cast<int>(35 * scale);
-    int labelWidth = static_cast<int>(70 * scale);
-    int columnWidth = (controlsArea.getWidth() - labelWidth * 3) / 3;
+    auto rowGap = juce::jmax(8, padding / 2);
+    auto totalRowGap = rowGap * 3;
+    auto sliderHeight = juce::jlimit(30, 42, (controlsArea.getHeight() - totalRowGap) / 4);
+    auto labelWidth = juce::jlimit(56, 78, controlsArea.getWidth() / 9);
+    auto columnGap = juce::jmax(10, padding);
+    auto columnWidth = juce::jmax(120, (controlsArea.getWidth() - (columnGap * 2)) / 3);
+
+    auto layoutSliderRow = [labelWidth, columnGap, columnWidth]
+        (juce::Rectangle<int> row, std::initializer_list<juce::Slider*> sliders)
+    {
+        auto iterator = sliders.begin();
+        for (int column = 0; column < 3 && iterator != sliders.end(); ++column, ++iterator)
+        {
+            auto cell = row.removeFromLeft(columnWidth);
+            if (*iterator != nullptr)
+                (*iterator)->setBounds(cell.withTrimmedLeft(labelWidth));
+
+            if (column < 2)
+                row.removeFromLeft(columnGap);
+        }
+    };
 
     // Row 1: Speed | Drive | Crush
-    auto row1 = controlsArea.removeFromTop(sliderHeight);
-    speedSlider.setBounds(row1.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    driveSlider.setBounds(row1.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    crushSlider.setBounds(row1.withTrimmedLeft(labelWidth));
+    layoutSliderRow(controlsArea.removeFromTop(sliderHeight), { &speedSlider, &driveSlider, &crushSlider });
+    controlsArea.removeFromTop(rowGap);
 
     // Row 2: Envelope | Env Rate | AM
-    auto row2 = controlsArea.removeFromTop(sliderHeight);
-    envelopeSlider.setBounds(row2.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    envRateSlider.setBounds(row2.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    amSlider.setBounds(row2.withTrimmedLeft(labelWidth));
+    layoutSliderRow(controlsArea.removeFromTop(sliderHeight), { &envelopeSlider, &envRateSlider, &amSlider });
+    controlsArea.removeFromTop(rowGap);
 
     // Row 3: Rand Pos | Rand Start
-    auto row3 = controlsArea.removeFromTop(sliderHeight);
-    randPosSlider.setBounds(row3.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    randStartSlider.setBounds(row3.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
+    layoutSliderRow(controlsArea.removeFromTop(sliderHeight), { &randPosSlider, &randStartSlider });
+    controlsArea.removeFromTop(rowGap);
 
     // Row 4: Pan | Volume
-    auto row4 = controlsArea.removeFromTop(sliderHeight);
-    panSlider.setBounds(row4.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
-    volumeSlider.setBounds(row4.removeFromLeft(columnWidth + labelWidth).withTrimmedLeft(labelWidth));
+    layoutSliderRow(controlsArea.removeFromTop(sliderHeight), { &panSlider, &volumeSlider });
 
     // LCD Display (main area)
-    lcdDisplay->setBounds(bounds.reduced(static_cast<int>(10 * scale)));
+    lcdDisplay->setBounds(bounds.reduced(padding));
 
     // Resizer
     resizer->setBounds(getWidth() - 16, getHeight() - 16, 16, 16);
@@ -243,8 +294,9 @@ void PrismEditor::resized()
 void PrismEditor::timerCallback()
 {
     // Update sample name in case it was loaded since last check
-    sampleNameLabel.setText(processorRef.getSampleName(selectedVoice), juce::dontSendNotification);
-    repaint();
+    auto sampleName = processorRef.getSampleName(selectedVoice);
+    if (sampleNameLabel.getText() != sampleName)
+        sampleNameLabel.setText(sampleName, juce::dontSendNotification);
 }
 
 void PrismEditor::updateSelectedVoiceControls()
@@ -267,6 +319,7 @@ void PrismEditor::updateSelectedVoiceControls()
     panAttachment.reset();
     volumeAttachment.reset();
     activeAttachment.reset();
+    markerModeAttachment.reset();
     syncEnableAttachment.reset();
     syncRateAttachment.reset();
     randRateAttachment.reset();
@@ -296,6 +349,8 @@ void PrismEditor::updateSelectedVoiceControls()
         params, prefix + "volume", volumeSlider);
     activeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         params, prefix + "active", activeButton);
+    markerModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        params, prefix + "marker_mode", markerModeButton);
 
     // Per-voice sync attachments
     syncEnableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
